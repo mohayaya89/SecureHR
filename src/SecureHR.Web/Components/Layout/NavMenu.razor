@@ -1,0 +1,101 @@
+﻿@rendermode InteractiveServer
+@using SecureHR.Web.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthService AuthService
+@implements IAsyncDisposable
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+        <a class="navbar-brand" href="">SecureHR</a>
+        @if (_initialized && AuthService.IsAuthenticated)
+        {
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-light small">@AuthService.Username (@AuthService.Role)</span>
+                <NavLink href="/logout" class="btn btn-outline-light btn-sm">
+                    <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
+                </NavLink>
+            </div>
+        }
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        @if (_initialized && AuthService.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/employees">
+                    <span class="bi bi-people-fill" aria-hidden="true"></span> Employees
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/departments">
+                    <span class="bi bi-diagram-3" aria-hidden="true"></span> Departments
+                </NavLink>
+            </div>
+
+            @* Hiding links is for convenience only; the API enforces the same role rules. *@
+            @if (AuthService.IsInRole("Admin", "HR"))
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/payroll">
+                        <span class="bi bi-cash-coin" aria-hidden="true"></span> Payroll
+                    </NavLink>
+                </div>
+            }
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="/reports">
+                    <span class="bi bi-bar-chart-fill" aria-hidden="true"></span> Reports
+                </NavLink>
+            </div>
+
+            @if (AuthService.IsInRole("Admin"))
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/audit-logs">
+                        <span class="bi bi-shield-check" aria-hidden="true"></span> Audit Logs
+                    </NavLink>
+                </div>
+            }
+        }
+    </nav>
+</div>
+
+@code {
+    private bool _initialized;
+
+    protected override void OnInitialized()
+    {
+        AuthService.OnAuthStateChanged += OnAuthStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // Browser storage is only available after the first render
+        await AuthService.InitializeAsync();
+        _initialized = true;
+        StateHasChanged();
+    }
+
+    // Login/logout elsewhere in this circuit
+    private void OnAuthStateChanged() => InvokeAsync(StateHasChanged);
+
+    ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        AuthService.OnAuthStateChanged -= OnAuthStateChanged;
+        return ValueTask.CompletedTask;
+    }
+}

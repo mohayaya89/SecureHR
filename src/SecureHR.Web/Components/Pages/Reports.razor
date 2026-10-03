@@ -1,0 +1,196 @@
+@page "/reports"
+@rendermode InteractiveServer
+@inherits AuthenticatedPage
+@using System.Globalization
+@using SecureHR.Contracts
+@using SecureHR.Web.Client
+@using SecureHR.Web.Services
+@inject ReportApiClient ReportApi
+
+<PageTitle>Reports</PageTitle>
+
+<div class="container mt-4">
+    <h2 class="mb-4">Reports</h2>
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible" role="alert">
+            <span class="bi bi-exclamation-triangle me-2"></span>@_errorMessage
+            <button type="button" class="btn-close" aria-label="Close" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    @if (!IsReady)
+    {
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    }
+    else
+    {
+        <div class="card mb-4 headcount-report">
+            <div class="card-header"><h5 class="mb-0">Headcount by Department</h5></div>
+            <div class="card-body">
+                @if (_headcount.Count == 0)
+                {
+                    <p class="text-muted mb-0">No departments.</p>
+                }
+                else
+                {
+                    var max = Math.Max(1, _headcount.Max(h => h.Count));
+                    <p class="text-muted small">Active employees: <strong>@_headcount.Sum(h => h.Count)</strong></p>
+                    <table class="table table-sm align-middle mb-0">
+                        <tbody>
+                            @foreach (var row in _headcount.OrderByDescending(h => h.Count).ThenBy(h => h.DepartmentName))
+                            {
+                                <tr>
+                                    <td style="width: 35%">@row.DepartmentName</td>
+                                    <td style="width: 10%" class="text-end">@row.Count</td>
+                                    <td>
+                                        <div class="progress" role="presentation" style="height: 0.75rem">
+                                            <div class="progress-bar" style="width: @(row.Count * 100 / max)%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+
+        @if (CanSeePayroll)
+        {
+            <div class="card mb-4 payroll-report">
+                <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <h5 class="mb-0">Payroll Summary</h5>
+                    <input type="month" class="form-control form-control-sm" style="max-width: 12rem" aria-label="Month"
+                           value="@_month.ToString("yyyy-MM", CultureInfo.InvariantCulture)" @onchange="OnMonthChangedAsync" />
+                </div>
+                <div class="card-body">
+                    @if (_summary is null || _summary.TotalHeadcount == 0)
+                    {
+                        <p class="text-muted mb-0">No payroll has been processed for @MonthName.</p>
+                    }
+                    else
+                    {
+                        <div class="row g-3 mb-4 text-center">
+                            <div class="col-sm-4">
+                                <div class="border rounded p-3">
+                                    <div class="text-muted small">Employees paid</div>
+                                    <div class="fs-4 fw-bold">@_summary.TotalHeadcount</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <div class="border rounded p-3">
+                                    <div class="text-muted small">Total gross</div>
+                                    <div class="fs-4 fw-bold">@Money(_summary.TotalGross)</div>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <div class="border rounded p-3">
+                                    <div class="text-muted small">Total net</div>
+                                    <div class="fs-4 fw-bold">@Money(_summary.TotalNet)</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h6>By department</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Department</th>
+                                        <th class="text-end">Active employees</th>
+                                        <th class="text-end">Total gross</th>
+                                        <th class="text-end">Average gross</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var dept in _summary.Breakdown.Where(d => d.TotalGross > 0))
+                                    {
+                                        <tr>
+                                            <td>@dept.DepartmentName</td>
+                                            <td class="text-end">@dept.Headcount</td>
+                                            <td class="text-end">@Money(dept.TotalGross)</td>
+                                            <td class="text-end">@Money(dept.AverageSalary)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h6 class="mt-3">Gross pay distribution</h6>
+                        var maxCount = Math.Max(1, _distribution.Count == 0 ? 1 : _distribution.Max(d => d.Count));
+                        <table class="table table-sm align-middle mb-0">
+                            <tbody>
+                                @foreach (var bucket in _distribution)
+                                {
+                                    <tr>
+                                        <td style="width: 35%">@bucket.Bucket</td>
+                                        <td style="width: 10%" class="text-end">@bucket.Count</td>
+                                        <td>
+                                            <div class="progress" role="presentation" style="height: 0.75rem">
+                                                <div class="progress-bar bg-success" style="width: @(bucket.Count * 100 / maxCount)%"></div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private static readonly CultureInfo Currency = CultureInfo.GetCultureInfo("en-US");
+
+    private string? _errorMessage;
+    private List<HeadcountByDepartmentDto> _headcount = [];
+    private PayrollSummaryReportDto? _summary;
+    private List<SalaryDistributionPointDto> _distribution = [];
+    private DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    private bool CanSeePayroll => AuthService.IsInRole("Admin", "HR");
+    private DateOnly MonthEnd => _month.AddMonths(1).AddDays(-1);
+    private string MonthName => _month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+
+    private static string Money(decimal amount) => amount.ToString("C", Currency);
+
+    protected override async Task OnAuthenticatedAsync()
+    {
+        try
+        {
+            _headcount = await ReportApi.GetHeadcountAsync();
+            if (CanSeePayroll)
+                await LoadPayrollAsync();
+        }
+        catch (ApiException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private async Task OnMonthChangedAsync(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParseExact($"{e.Value}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var month))
+        {
+            _month = month;
+            try
+            {
+                await LoadPayrollAsync();
+            }
+            catch (ApiException ex)
+            {
+                _errorMessage = ex.Message;
+            }
+        }
+    }
+
+    private async Task LoadPayrollAsync()
+    {
+        _summary = await ReportApi.GetPayrollSummaryAsync(_month, MonthEnd);
+        _distribution = await ReportApi.GetSalaryDistributionAsync(_month, MonthEnd);
+    }
+}

@@ -1,0 +1,234 @@
+@page "/audit-logs"
+@rendermode InteractiveServer
+@inherits AuthenticatedPage
+@using System.Text.Json
+@using SecureHR.Contracts
+@using SecureHR.Domain.Enums
+@using SecureHR.Web.Client
+@using SecureHR.Web.Services
+@inject AuditLogApiClient AuditLogApi
+
+<PageTitle>Audit Logs</PageTitle>
+
+<div class="container mt-4">
+    <h2 class="mb-4">Audit Logs</h2>
+
+    @if (!IsReady)
+    {
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    }
+    else if (!AuthService.IsInRole("Admin"))
+    {
+        <div class="alert alert-warning">
+            <span class="bi bi-lock me-2"></span>The audit log is available to Admin users only.
+        </div>
+    }
+    else
+    {
+        <form class="card mb-4" @onsubmit="ApplyFiltersAsync">
+            <div class="card-body row g-3 align-items-end">
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="f-entity">Entity</label>
+                    <select id="f-entity" class="form-select" @bind="_filter.EntityName">
+                        <option value="">All</option>
+                        @foreach (var entity in Entities)
+                        {
+                            <option value="@entity">@entity</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="f-action">Action</label>
+                    <select id="f-action" class="form-select" @bind="_action">
+                        <option value="">All</option>
+                        @foreach (var action in Enum.GetNames<AuditAction>())
+                        {
+                            <option value="@action">@action</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="f-user">User</label>
+                    <input id="f-user" class="form-control" @bind="_filter.Username" placeholder="username" />
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="f-from">From</label>
+                    <input id="f-from" type="date" class="form-control" @bind="_filter.From" />
+                </div>
+                <div class="col-sm-6 col-lg-2">
+                    <label class="form-label" for="f-to">To</label>
+                    <input id="f-to" type="date" class="form-control" @bind="_filter.To" />
+                </div>
+                <div class="col-sm-6 col-lg-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">Filter</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="ClearFiltersAsync">Clear</button>
+                </div>
+            </div>
+        </form>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger" role="alert">@_errorMessage</div>
+        }
+
+        @if (_logs is null)
+        {
+            <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+        }
+        else if (_logs.Count == 0)
+        {
+            <div class="alert alert-info">No audit entries match these filters.</div>
+        }
+        else
+        {
+            <p class="text-muted small">@_totalCount entr@(_totalCount == 1 ? "y" : "ies"), newest first. Times are UTC.</p>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped align-top audit-table">
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Entity</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in _logs)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@log.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                <td>@log.Username</td>
+                                <td><span class="badge @ActionBadge(log.Action)">@log.Action</span></td>
+                                <td class="text-nowrap">@log.EntityName #@log.EntityId</td>
+                                <td>
+                                    @if (DescribeChanges(log.ChangesJson) is { Count: > 0 } changes)
+                                    {
+                                        <details>
+                                            <summary>@changes.Count field@(changes.Count == 1 ? "" : "s")</summary>
+                                            <ul class="mb-0 small">
+                                                @foreach (var change in changes)
+                                                {
+                                                    <li>@change</li>
+                                                }
+                                            </ul>
+                                        </details>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav aria-label="Audit log pages" class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => GoToPageAsync(_page - 1)" disabled="@(_page <= 1)">Previous</button>
+                <span class="small">Page @_page of @TotalPages</span>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="() => GoToPageAsync(_page + 1)" disabled="@(_page >= TotalPages)">Next</button>
+            </nav>
+        }
+    }
+</div>
+
+@code {
+    private const int PageSize = 25;
+    private static readonly string[] Entities = ["Employee", "Department", "PayrollRecord", "User"];
+
+    private AuditLogFilterRequestDto _filter = new();
+    private string _action = "";
+    private List<AuditLogDto>? _logs;
+    private int _totalCount;
+    private int _page = 1;
+    private string? _errorMessage;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_totalCount / (double)PageSize));
+
+    protected override async Task OnAuthenticatedAsync()
+    {
+        if (AuthService.IsInRole("Admin"))
+            await LoadAsync();    }
+
+    private async Task LoadAsync()
+    {
+        _errorMessage = null;
+        _filter.Action = Enum.TryParse<AuditAction>(_action, out var action) ? action : null;
+        try
+        {
+            var result = await AuditLogApi.GetPagedAsync(_filter, _page, PageSize);
+            _logs = result?.Items ?? [];
+            _totalCount = result?.TotalCount ?? 0;
+        }
+        catch (ApiException ex)
+        {
+            _logs = [];
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _filter = new();
+        _action = "";
+        await ApplyFiltersAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _page = Math.Clamp(page, 1, TotalPages);
+        await LoadAsync();
+    }
+
+    private static string ActionBadge(string action) => action switch
+    {
+        "Create" => "bg-success",
+        "Update" => "bg-primary",
+        "Delete" => "bg-danger",
+        "View" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    // Turns {"Field": value} / {"Field": {"from": a, "to": b}} into readable lines
+    private static List<string> DescribeChanges(string? json)
+    {
+        var lines = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+            return lines;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                var value = property.Value;
+                if (value.ValueKind == JsonValueKind.Object
+                    && value.TryGetProperty("from", out var from) && value.TryGetProperty("to", out var to))
+                {
+                    lines.Add($"{property.Name}: {Display(from)} → {Display(to)}");
+                }
+                else
+                {
+                    lines.Add($"{property.Name}: {Display(value)}");
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            lines.Add(json);
+        }
+
+        return lines;
+    }
+
+    private static string Display(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.Null => "(empty)",
+        JsonValueKind.String => value.GetString() is { Length: > 0 } s ? s : "(empty)",
+        _ => value.GetRawText()
+    };
+}

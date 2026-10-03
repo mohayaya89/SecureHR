@@ -1,0 +1,109 @@
+@host = https://localhost:7209
+
+# 1. Log in with the development admin account, then paste the returned token below.
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "AdminPassword123!"
+}
+
+###
+
+@token = paste-token-here
+
+### Employees
+GET {{host}}/api/employees?page=1&pageSize=20&sortBy=hireDate&descending=true
+Authorization: Bearer {{token}}
+
+###
+GET {{host}}/api/employees/1
+Authorization: Bearer {{token}}
+
+###
+POST {{host}}/api/employees
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "Ada",
+  "lastName": "Lovelace",
+  "email": "ada.lovelace@securehr.com",
+  "departmentId": 1,
+  "hireDate": "2026-01-15",
+  "annualSalary": 85000,
+  "jobTitle": "Software Engineer"
+}
+
+### Departments
+GET {{host}}/api/departments?page=1&pageSize=10
+Authorization: Bearer {{token}}
+
+### Payroll
+POST {{host}}/api/payroll/process-batch
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "periodStart": "2026-09-01",
+  "periodEnd": "2026-09-30"
+}
+
+###
+GET {{host}}/api/payroll/period?periodStart=2026-09-01&periodEnd=2026-09-30
+Authorization: Bearer {{token}}
+
+###
+GET {{host}}/api/payroll/summary?periodStart=2026-09-01&periodEnd=2026-09-30
+Authorization: Bearer {{token}}
+
+### Reports
+GET {{host}}/api/reports/headcount
+Authorization: Bearer {{token}}
+
+###
+GET {{host}}/api/reports/department-payroll-summary?periodStart=2026-09-01&periodEnd=2026-09-30
+Authorization: Bearer {{token}}
+
+### Audit log
+GET {{host}}/api/auditlog?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### Departments: create, rename, deactivate
+POST {{host}}/api/departments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Payroll Operations"
+}
+
+###
+PUT {{host}}/api/departments/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Engineering"
+}
+
+###
+DELETE {{host}}/api/departments/23
+Authorization: Bearer {{token}}
+
+### Update an employee
+PUT {{host}}/api/employees/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "firstName": "John",
+  "lastName": "Smith",
+  "email": "john.smith@securehr.com",
+  "jobTitle": "Senior Software Engineer",
+  "departmentId": 1,
+  "hireDate": "2020-01-15",
+  "annualSalary": 95000,
+  "isActive": true
+}

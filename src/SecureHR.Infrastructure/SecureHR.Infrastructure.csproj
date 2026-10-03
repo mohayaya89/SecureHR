@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- EF Core persistence, cryptography, authentication and other implementations of Application interfaces. -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SecureHR.Application\SecureHR.Application.csproj" />
+  </ItemGroup>
+
+</Project>

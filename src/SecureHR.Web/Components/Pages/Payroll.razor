@@ -1,0 +1,215 @@
+@page "/payroll"
+@rendermode InteractiveServer
+@inherits AuthenticatedPage
+@using System.Globalization
+@using SecureHR.Contracts
+@using SecureHR.Web.Client
+@using SecureHR.Web.Services
+@inject PayrollApiClient PayrollApi
+
+<PageTitle>Payroll</PageTitle>
+
+<div class="container mt-4">
+    <h2 class="mb-4">Payroll</h2>
+
+    @if (!IsReady)
+    {
+        <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+    }
+    else if (!CanUsePayroll)
+    {
+        <div class="alert alert-warning">
+            <span class="bi bi-lock me-2"></span>Payroll is available to Admin and HR users only.
+        </div>
+    }
+    else
+    {
+        <div class="card mb-4">
+            <div class="card-body d-flex flex-wrap align-items-end gap-3">
+                <div>
+                    <label class="form-label" for="payroll-month">Month</label>
+                    <input id="payroll-month" type="month" class="form-control"
+                           value="@_month.ToString("yyyy-MM", CultureInfo.InvariantCulture)" @onchange="OnMonthChangedAsync" />
+                </div>
+                <button class="btn btn-primary" @onclick="() => _showConfirm = true"
+                        disabled="@(_loading || _records.Count > 0)">
+                    <span class="bi bi-play-circle me-2"></span>Run Payroll for @MonthName
+                </button>
+                @if (_records.Count > 0)
+                {
+                    <span class="text-muted small">Payroll for @MonthName has been processed.</span>
+                }
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible" role="alert">
+                <span class="bi bi-exclamation-triangle me-2"></span>@_errorMessage
+                <button type="button" class="btn-close" aria-label="Close" @onclick="() => _errorMessage = null"></button>
+            </div>
+        }
+
+        @if (_lastRun is not null)
+        {
+            <div class="alert alert-success" role="status">
+                <strong>Payroll processed for @MonthName:</strong>
+                @_lastRun.Lines.Count employee(s) paid, gross @Money(_lastRun.TotalGross), net @Money(_lastRun.TotalNet).
+                @if (_lastRun.SkippedEmployees.Count > 0)
+                {
+                    <div class="mt-2">Not paid:</div>
+                    <ul class="mb-0">
+                        @foreach (var skipped in _lastRun.SkippedEmployees)
+                        {
+                            <li>@skipped</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+
+        @if (_loading)
+        {
+            <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+        }
+        else if (_records.Count == 0)
+        {
+            <div class="alert alert-info">
+                <span class="bi bi-info-circle me-2"></span>No payroll has been processed for @MonthName yet.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped payroll-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th class="text-end">Gross</th>
+                            <th class="text-end">Net</th>
+                            <th>Processed (UTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var record in _records)
+                        {
+                            <tr>
+                                <td>@record.EmployeeFullName</td>
+                                <td class="text-end">@Money(record.GrossSalary)</td>
+                                <td class="text-end">@Money(record.NetSalary)</td>
+                                <td>@record.ProcessedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-bold">
+                            <td>Total (@_records.Count)</td>
+                            <td class="text-end">@Money(_records.Sum(r => r.GrossSalary))</td>
+                            <td class="text-end">@Money(_records.Sum(r => r.NetSalary))</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="text-muted small">Net pay currently uses a flat 20% placeholder deduction.</p>
+        }
+    }
+</div>
+
+@if (_showConfirm)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><span class="bi bi-cash-coin me-2"></span>Run Payroll</h5>
+                    <button type="button" class="btn-close" @onclick="() => _showConfirm = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Pay all active employees for <strong>@MonthName</strong>?</p>
+                    <p class="text-muted small mb-0">Each month can only be processed once.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _showConfirm = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="RunPayrollAsync" disabled="@_running">
+                        <span class="bi bi-check-circle me-1"></span>Run Payroll
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly CultureInfo Currency = CultureInfo.GetCultureInfo("en-US");
+
+    private bool _loading;
+    private bool _running;
+    private bool _showConfirm;
+    private DateOnly _month = FirstOfMonth(DateOnly.FromDateTime(DateTime.Today));
+    private List<PayrollRecordDto> _records = [];
+    private PayrollBatchDto? _lastRun;
+    private string? _errorMessage;
+
+    private bool CanUsePayroll => AuthService.IsInRole("Admin", "HR");
+    private DateOnly MonthEnd => _month.AddMonths(1).AddDays(-1);
+    private string MonthName => _month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+
+    private static DateOnly FirstOfMonth(DateOnly date) => new(date.Year, date.Month, 1);
+    private static string Money(decimal amount) => amount.ToString("C", Currency);
+
+    protected override async Task OnAuthenticatedAsync()
+    {
+        if (CanUsePayroll)
+            await LoadRecordsAsync();    }
+
+    private async Task OnMonthChangedAsync(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParseExact($"{e.Value}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var month))
+        {
+            _month = month;
+            _lastRun = null;
+            await LoadRecordsAsync();
+        }
+    }
+
+    private async Task LoadRecordsAsync()
+    {
+        _loading = true;
+        try
+        {
+            _records = (await PayrollApi.GetByPeriodAsync(_month, MonthEnd))
+                .OrderBy(r => r.EmployeeFullName)
+                .ToList();
+        }
+        catch (ApiException ex)
+        {
+            _records = [];
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RunPayrollAsync()
+    {
+        _running = true;
+        _errorMessage = null;
+        try
+        {
+            _lastRun = await PayrollApi.ProcessAsync(_month, MonthEnd);
+            await LoadRecordsAsync();
+        }
+        catch (ApiException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _running = false;
+            _showConfirm = false;
+        }
+    }
+}

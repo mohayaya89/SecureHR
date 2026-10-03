@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- DTOs shared by the API and its clients (the Web app). -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\SecureHR.Domain\SecureHR.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
