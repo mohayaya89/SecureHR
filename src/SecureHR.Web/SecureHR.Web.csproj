@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+  <!-- The UI talks to the API over HTTP and only needs the shared DTOs. -->
+  <ItemGroup>
+    <ProjectReference Include="..\SecureHR.Contracts\SecureHR.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

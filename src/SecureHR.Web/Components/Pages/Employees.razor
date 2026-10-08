@@ -1,0 +1,544 @@
+@page "/employees"
+@rendermode InteractiveServer
+@inherits AuthenticatedPage
+@inject EmployeeApiClient EmployeeApi
+@inject DepartmentApiClient DepartmentApi
+@inject ILogger<Employees> Logger
+@using SecureHR.Web.Client
+@using SecureHR.Web.Services
+@using SecureHR.Contracts
+
+<PageTitle>Employees</PageTitle>
+
+<div class="employees-container">
+    <div class="employees-header">
+        <h2 class="employees-title">Employees</h2>
+        @if (CanManage)
+        {
+            <button class="btn btn-primary" @onclick="ShowCreateDialog">
+                <span class="bi bi-plus-circle me-2"></span>Add Employee
+            </button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible" role="alert">
+            <span class="bi bi-exclamation-triangle me-2"></span>@_errorMessage
+            <button type="button" class="btn-close" aria-label="Close" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    @if (_employees is null)
+    {
+        <div class="loading-container">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading employees...</p>
+        </div>
+    }
+    else if (_employees.Count == 0)
+    {
+        <div class="alert alert-info">
+            <span class="bi bi-info-circle me-2"></span>
+            No employees found.@(CanManage ? " Click \"Add Employee\" to create one." : "")
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover table-striped employees-table">
+                <thead>
+                    <tr>
+                        <th>Employee #</th>
+                        <th class="sortable" @onclick="@(() => SortByAsync(SortName))">
+                            Name @SortIcon(SortName)
+                        </th>
+                        <th>Job Title</th>
+                        <th class="sortable" @onclick="@(() => SortByAsync(SortDepartment))">
+                            Department @SortIcon(SortDepartment)
+                        </th>
+                        <th class="sortable" @onclick="@(() => SortByAsync(SortHireDate))">
+                            Hire Date @SortIcon(SortHireDate)
+                        </th>
+                        <th>Status</th>
+                        @if (CanManage)
+                        {
+                            <th>Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var employee in _employees)
+                    {
+                        <tr>
+                            <td class="text-muted">@employee.EmployeeNumber</td>
+                            <td>@employee.FullName</td>
+                            <td>@employee.JobTitle</td>
+                            <td>@employee.DepartmentName</td>
+                            <td>@employee.HireDate.ToString("M/d/yyyy")</td>
+                            <td>
+                                @if (employee.IsActive)
+                                {
+                                    <span class="badge bg-success">Active</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Inactive</span>
+                                }
+                            </td>
+                            @if (CanManage)
+                            {
+                                <td class="text-nowrap">
+                                    <button class="btn btn-sm btn-outline-secondary me-1" @onclick="@(() => ShowEditDialogAsync(employee.Id))">
+                                        <span class="bi bi-pencil me-1"></span>Edit
+                                    </button>
+                                    @if (employee.IsActive)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="@(() => ShowDeactivateDialog(employee.Id))">
+                                            <span class="bi bi-dash-circle me-1"></span>Deactivate
+                                        </button>
+                                    }
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination">
+                <li class="page-item @(_currentPage <= 1 ? "disabled" : "")">
+                    <button class="page-link" @onclick="() => GoToPageAsync(_currentPage - 1)" disabled="@(_currentPage <= 1)">Previous</button>
+                </li>
+
+                @for (int i = 1; i <= _totalPages; i++)
+                {
+                    int pageNum = i;
+                    <li class="page-item @(_currentPage == pageNum ? "active" : "")">
+                        <button class="page-link" @onclick="@(() => GoToPageAsync(pageNum))">@pageNum.ToString()</button>
+                    </li>
+                }
+
+                <li class="page-item @(_currentPage >= _totalPages ? "disabled" : "")">
+                    <button class="page-link" @onclick="() => GoToPageAsync(_currentPage + 1)" disabled="@(_currentPage >= _totalPages)">Next</button>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>
+
+<!-- Modal for creating employees -->
+@if (_showCreateDialog)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <span class="bi bi-person-plus me-2"></span>Add New Employee
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateDialog"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_newEmployee" OnValidSubmit="CreateEmployeeAsync">
+                        <DataAnnotationsValidator />
+
+                        @if (!string.IsNullOrEmpty(_createError))
+                        {
+                            <div class="alert alert-danger" role="alert">@_createError</div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">First Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_newEmployee.FirstName" placeholder="Enter first name" />
+                            <ValidationMessage For="@(() => _newEmployee.FirstName)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Last Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_newEmployee.LastName" placeholder="Enter last name" />
+                            <ValidationMessage For="@(() => _newEmployee.LastName)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Email <span class="text-danger">*</span></label>
+                            <InputText type="email" class="form-control" @bind-Value="_newEmployee.Email" placeholder="Enter email" />
+                            <ValidationMessage For="@(() => _newEmployee.Email)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Job Title <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_newEmployee.JobTitle" placeholder="e.g. Software Engineer" />
+                            <ValidationMessage For="@(() => _newEmployee.JobTitle)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Department <span class="text-danger">*</span></label>
+                            <InputSelect class="form-select" @bind-Value="_newEmployee.DepartmentId">
+                                <option value="0">Select a department</option>
+                                @foreach (var department in _departments)
+                                {
+                                    <option value="@department.Id">@department.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _newEmployee.DepartmentId)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Hire Date <span class="text-danger">*</span></label>
+                            <InputDate class="form-control" @bind-Value="_newEmployee.HireDate" />
+                            <ValidationMessage For="@(() => _newEmployee.HireDate)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Annual Salary <span class="text-danger">*</span></label>
+                            <InputNumber class="form-control" @bind-Value="_newEmployee.AnnualSalary" min="0" step="0.01" />
+                            <ValidationMessage For="@(() => _newEmployee.AnnualSalary)" class="text-danger small" />
+                        </div>
+
+                        <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseCreateDialog">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                <span class="bi bi-check-circle me-1"></span>Save Employee
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal for editing employees -->
+@if (_editEmployee is not null)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <span class="bi bi-pencil-square me-2"></span>Edit Employee
+                        <small class="text-muted ms-2">@_editEmployeeNumber</small>
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditDialog"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_editEmployee" OnValidSubmit="SaveEditAsync">
+                        <DataAnnotationsValidator />
+
+                        @if (!string.IsNullOrEmpty(_editError))
+                        {
+                            <div class="alert alert-danger" role="alert">@_editError</div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">First Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_editEmployee.FirstName" />
+                            <ValidationMessage For="@(() => _editEmployee.FirstName)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Last Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_editEmployee.LastName" />
+                            <ValidationMessage For="@(() => _editEmployee.LastName)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Email <span class="text-danger">*</span></label>
+                            <InputText type="email" class="form-control" @bind-Value="_editEmployee.Email" />
+                            <ValidationMessage For="@(() => _editEmployee.Email)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Job Title <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_editEmployee.JobTitle" />
+                            <ValidationMessage For="@(() => _editEmployee.JobTitle)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Department <span class="text-danger">*</span></label>
+                            <InputSelect class="form-select" @bind-Value="_editEmployee.DepartmentId">
+                                <option value="0">Select a department</option>
+                                @foreach (var department in _departments)
+                                {
+                                    <option value="@department.Id">@department.Name</option>
+                                }
+                            </InputSelect>
+                            <ValidationMessage For="@(() => _editEmployee.DepartmentId)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Hire Date <span class="text-danger">*</span></label>
+                            <InputDate class="form-control" @bind-Value="_editEmployee.HireDate" />
+                            <ValidationMessage For="@(() => _editEmployee.HireDate)" class="text-danger small" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Annual Salary <span class="text-danger">*</span></label>
+                            <InputNumber class="form-control" @bind-Value="_editEmployee.AnnualSalary" min="0" step="0.01" />
+                            <ValidationMessage For="@(() => _editEmployee.AnnualSalary)" class="text-danger small" />
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <InputCheckbox id="edit-active" class="form-check-input" @bind-Value="_editEmployee.IsActive" />
+                            <label class="form-check-label" for="edit-active">Active</label>
+                        </div>
+
+                        <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+                            <button type="button" class="btn btn-secondary" @onclick="CloseEditDialog">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                <span class="bi bi-check-circle me-1"></span>Save Changes
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Deactivation confirmation modal -->
+@if (_showDeleteConfirm)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger-subtle">
+                    <h5 class="modal-title text-danger">
+                        <span class="bi bi-exclamation-triangle me-2"></span>Confirm Deactivation
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CancelDeactivate"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to deactivate this employee?</p>
+                    <p class="text-muted small">The employee's records are kept and they will appear as Inactive.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDeactivate">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeactivateAsync" disabled="@_saving">
+                        <span class="bi bi-check-circle me-1"></span>Deactivate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string SortName = "name";
+    private const string SortDepartment = "department";
+    private const string SortHireDate = "hireDate";
+    private const int PageSize = 10;
+
+    private List<EmployeeListItemDto>? _employees;
+    private List<DepartmentListItemDto> _departments = [];
+    private bool _showCreateDialog;
+    private bool _showDeleteConfirm;
+    private bool _saving;
+    private int _deactivateEmployeeId;
+    private CreateEmployeeRequestDto _newEmployee = NewEmployee();
+    private string? _errorMessage;
+    private string? _createError;
+    private UpdateEmployeeRequestDto? _editEmployee;
+    private int _editEmployeeId;
+    private string? _editError;
+    private string? _editEmployeeNumber;
+
+    // Server-side pagination & sorting
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private string _sortColumn = SortName;
+    private bool _sortDescending;
+
+    private bool CanManage => AuthService.IsInRole("Admin", "HR");
+
+    private static CreateEmployeeRequestDto NewEmployee() =>
+        new() { HireDate = DateOnly.FromDateTime(DateTime.Today) };
+
+    protected override async Task OnAuthenticatedAsync()
+    {
+        await LoadEmployeesAsync();
+    }
+
+    private async Task LoadEmployeesAsync()
+    {
+        try
+        {
+            var result = await EmployeeApi.GetPagedAsync(_currentPage, PageSize, _sortColumn, _sortDescending);
+            _employees = result?.Items ?? [];
+            _totalPages = Math.Max(1, (int)Math.Ceiling((result?.TotalCount ?? 0) / (double)PageSize));
+        }
+        catch (ApiException ex)
+        {
+            Logger.LogWarning("Loading employees failed: {Status}", ex.StatusCode);
+            _employees ??= [];
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private RenderFragment SortIcon(string column) => __builder =>
+    {
+        if (_sortColumn == column)
+        {
+            <i class="bi @(_sortDescending ? "bi-arrow-down" : "bi-arrow-up")"></i>
+        }
+    };
+
+    private async Task SortByAsync(string column)
+    {
+        _sortDescending = _sortColumn == column && !_sortDescending;
+        _sortColumn = column;
+        _currentPage = 1;
+        await LoadEmployeesAsync();
+    }
+
+    private async Task GoToPageAsync(int pageNumber)
+    {
+        if (pageNumber < 1 || pageNumber > _totalPages || pageNumber == _currentPage)
+            return;
+
+        _currentPage = pageNumber;
+        await LoadEmployeesAsync();
+    }
+
+    private async Task ShowCreateDialog()
+    {
+        _createError = null;
+        _newEmployee = NewEmployee();
+        _showCreateDialog = true;
+
+        try
+        {
+            await LoadDepartmentOptionsAsync();
+        }
+        catch (ApiException ex)
+        {
+            _createError = ex.Message;
+        }
+    }
+
+    // Active departments for the dropdowns (API maximum page size)
+    private async Task LoadDepartmentOptionsAsync()
+    {
+        var result = await DepartmentApi.GetPagedAsync(1, PagingDefaults.MaxPageSize);
+        _departments = result?.Items ?? [];
+    }
+
+    private async Task ShowEditDialogAsync(int id)
+    {
+        try
+        {
+            // Load the full record rather than the list row so every field is current
+            var employee = await EmployeeApi.GetByIdAsync(id);
+            if (employee is null)
+            {
+                _errorMessage = "That employee no longer exists.";
+                return;
+            }
+
+            await LoadDepartmentOptionsAsync();
+
+            _editEmployeeId = id;
+            _editError = null;
+            _editEmployeeNumber = employee.EmployeeNumber;
+            _editEmployee = new UpdateEmployeeRequestDto
+            {
+                FirstName = employee.FirstName,
+                LastName = employee.LastName,
+                Email = employee.Email,
+                JobTitle = employee.JobTitle,
+                // An employee in a now-inactive department must pick a new one
+                DepartmentId = _departments.Any(d => d.Id == employee.DepartmentId) ? employee.DepartmentId : 0,
+                HireDate = employee.HireDate,
+                AnnualSalary = employee.AnnualSalary ?? 0,
+                IsActive = employee.IsActive
+            };
+        }
+        catch (ApiException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private void CloseEditDialog() => _editEmployee = null;
+
+    private async Task SaveEditAsync()
+    {
+        _saving = true;
+        _editError = null;
+        try
+        {
+            await EmployeeApi.UpdateAsync(_editEmployeeId, _editEmployee!);
+            _editEmployee = null;
+            await LoadEmployeesAsync();
+        }
+        catch (ApiException ex)
+        {
+            // Shown inside the dialog so the user can correct the input (e.g. duplicate email)
+            _editError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void CloseCreateDialog() => _showCreateDialog = false;
+
+    private async Task CreateEmployeeAsync()
+    {
+        _saving = true;
+        _createError = null;
+        try
+        {
+            await EmployeeApi.CreateAsync(_newEmployee);
+            _showCreateDialog = false;
+            await LoadEmployeesAsync();
+        }
+        catch (ApiException ex)
+        {
+            // Shown inside the dialog so the user can correct the input (e.g. duplicate email)
+            _createError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ShowDeactivateDialog(int id)
+    {
+        _deactivateEmployeeId = id;
+        _showDeleteConfirm = true;
+    }
+
+    private void CancelDeactivate()
+    {
+        _showDeleteConfirm = false;
+        _deactivateEmployeeId = 0;
+    }
+
+    private async Task ConfirmDeactivateAsync()
+    {
+        _saving = true;
+        try
+        {
+            await EmployeeApi.DeactivateAsync(_deactivateEmployeeId);
+            await LoadEmployeesAsync();
+        }
+        catch (ApiException ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+            _showDeleteConfirm = false;
+            _deactivateEmployeeId = 0;
+        }
+    }
+}

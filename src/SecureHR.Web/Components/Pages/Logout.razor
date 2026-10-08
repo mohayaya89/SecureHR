@@ -1,0 +1,37 @@
+@page "/logout"
+@rendermode InteractiveServer
+@using SecureHR.Web.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Logout</PageTitle>
+
+<div class="logout-container">
+    <div class="logout-card">
+        <div class="logout-header text-center">
+            <h2>Logging Out</h2>
+            <p class="text-muted">Please wait while we secure your session...</p>
+        </div>
+
+        <div class="spinner-border d-block mx-auto" role="status">
+            <span class="visually-hidden">Logging out...</span>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _processed = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_processed)
+        {
+            _processed = true;
+            // Clears the token from memory and browser storage
+            await AuthService.Logout();
+
+            // Redirect to login page
+            Navigation.NavigateTo("/login", forceLoad: false);
+        }
+    }
+}

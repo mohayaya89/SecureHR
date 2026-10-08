@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Business services and the interfaces they depend on (repositories, crypto, current user). -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SecureHR.Contracts\SecureHR.Contracts.csproj" />
+    <ProjectReference Include="..\SecureHR.Domain\SecureHR.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

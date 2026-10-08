@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/SecureHR.Api/SecureHR.Api.csproj" />
+  <Project Path="src/SecureHR.Application/SecureHR.Application.csproj" />
+  <Project Path="src/SecureHR.Contracts/SecureHR.Contracts.csproj" />
+  <Project Path="src/SecureHR.Domain/SecureHR.Domain.csproj" />
+  <Project Path="src/SecureHR.Infrastructure/SecureHR.Infrastructure.csproj" />
+  <Project Path="src/SecureHR.Web/SecureHR.Web.csproj" />
+  <Project Path="tests/SecureHR.Tests/SecureHR.Tests.csproj" />
+</Solution>

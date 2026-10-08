@@ -1,0 +1,100 @@
+@page "/login"
+@rendermode InteractiveServer
+@using SecureHR.Web.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <h2>SecureHR</h2>
+            <p class="text-muted">Employee Management System</p>
+        </div>
+
+        <form @onsubmit="HandleLogin">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" 
+                       class="form-control" 
+                       id="username" 
+                       placeholder="Enter your username"
+                       @bind="Username"
+                       required 
+                       autofocus />
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" 
+                       class="form-control" 
+                       id="password" 
+                       placeholder="Enter your password"
+                       @bind="Password"
+                       required />
+            </div>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    @ErrorMessage
+                    <button type="button" class="btn-close" @onclick="() => ErrorMessage = string.Empty"></button>
+                </div>
+            }
+
+            <button type="submit" class="btn btn-primary w-100 mb-3" disabled="@IsLoading">
+                @if (IsLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    <span>Logging in...</span>
+                }
+                else
+                {
+                    <span>Sign In</span>
+                }
+            </button>
+        </form>
+    </div>
+</div>
+
+
+@code {
+    private string Username = string.Empty;
+    private string Password = string.Empty;
+    private string ErrorMessage = string.Empty;
+    private bool IsLoading;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        // Already signed in (e.g. returning in a new tab): go straight to the dashboard
+        await AuthService.InitializeAsync();
+        if (AuthService.IsAuthenticated)
+            Navigation.NavigateTo("/");
+    }
+
+    private async Task HandleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(Username) || string.IsNullOrWhiteSpace(Password))
+        {
+            ErrorMessage = "Username and password are required";
+            return;
+        }
+
+        ErrorMessage = string.Empty;
+        IsLoading = true;
+        try
+        {
+            var error = await AuthService.LoginAsync(Username, Password);
+            if (error is null)
+                Navigation.NavigateTo("/");
+            else
+                ErrorMessage = error;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+}

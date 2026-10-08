@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "API + Web",
+    "Projects": [
+      {
+        "Path": "src\SecureHR.Api\SecureHR.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "src\SecureHR.Web\SecureHR.Web.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

@@ -1,0 +1,374 @@
+@page "/departments"
+@rendermode InteractiveServer
+@inherits AuthenticatedPage
+@inject DepartmentApiClient DepartmentApi
+@inject ILogger<Departments> Logger
+@using SecureHR.Web.Client
+@using SecureHR.Contracts
+@using SecureHR.Web.Services
+
+<PageTitle>Departments</PageTitle>
+
+<div class="container">
+    <div class="departments-header">
+        <h2 class="departments-title">Departments</h2>
+        @if (CanManage)
+        {
+            <button class="btn btn-primary" @onclick="ShowCreateDialog">
+                <span class="bi bi-plus-circle me-2"></span>Add Department
+            </button>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible" role="alert">
+            <span class="bi bi-exclamation-triangle me-2"></span>@_errorMessage
+            <button type="button" class="btn-close" aria-label="Close" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    @if (_departments is null)
+    {
+        <div class="loading-container">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading departments...</p>
+        </div>
+    }
+    else if (_departments.Count == 0)
+    {
+        <div class="alert alert-info">
+            <span class="bi bi-info-circle me-2"></span>
+            No departments found.@(CanManage ? " Click \"Add Department\" to create one." : "")
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover table-striped departments-table">
+                <thead>
+                    <tr>
+                        <th class="sortable" @onclick="@(() => SortByAsync(SortName))">
+                            Name @SortIcon(SortName)
+                        </th>
+                        <th class="sortable" @onclick="@(() => SortByAsync(SortEmployeeCount))">
+                            Active Employees @SortIcon(SortEmployeeCount)
+                        </th>
+                        @if (CanManage)
+                        {
+                            <th>Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var department in _departments)
+                    {
+                        <tr>
+                            <td>@department.Name</td>
+                            <td>@department.EmployeeCount</td>
+                            @if (CanManage)
+                            {
+                                <td class="text-nowrap">
+                                    <button class="btn btn-sm btn-outline-secondary me-1" @onclick="@(() => ShowEditDialog(department))">
+                                        <span class="bi bi-pencil me-1"></span>Edit
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="@(() => ShowDeactivateDialog(department))">
+                                        <span class="bi bi-dash-circle me-1"></span>Deactivate
+                                    </button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination">
+                <li class="page-item @(_currentPage <= 1 ? "disabled" : "")">
+                    <button class="page-link" @onclick="() => GoToPageAsync(_currentPage - 1)" disabled="@(_currentPage <= 1)">Previous</button>
+                </li>
+
+                @for (int i = 1; i <= _totalPages; i++)
+                {
+                    int pageNum = i;
+                    <li class="page-item @(_currentPage == pageNum ? "active" : "")">
+                        <button class="page-link" @onclick="@(() => GoToPageAsync(pageNum))">@pageNum.ToString()</button>
+                    </li>
+                }
+
+                <li class="page-item @(_currentPage >= _totalPages ? "disabled" : "")">
+                    <button class="page-link" @onclick="() => GoToPageAsync(_currentPage + 1)" disabled="@(_currentPage >= _totalPages)">Next</button>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>
+
+<!-- Modal for creating departments -->
+@if (_showCreateDialog)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <span class="bi bi-diagram-3 me-2"></span>Add New Department
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _showCreateDialog = false"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_newDepartment" OnValidSubmit="CreateDepartmentAsync">
+                        <DataAnnotationsValidator />
+
+                        @if (!string.IsNullOrEmpty(_createError))
+                        {
+                            <div class="alert alert-danger" role="alert">@_createError</div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Department Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_newDepartment.Name" placeholder="Enter department name" />
+                            <ValidationMessage For="@(() => _newDepartment.Name)" class="text-danger small" />
+                        </div>
+
+                        <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+                            <button type="button" class="btn btn-secondary" @onclick="() => _showCreateDialog = false">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                <span class="bi bi-check-circle me-1"></span>Save Department
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal for renaming departments -->
+@if (_editDepartment is not null)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <span class="bi bi-pencil-square me-2"></span>Edit Department
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _editDepartment = null"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="_editDepartment" OnValidSubmit="SaveEditAsync">
+                        <DataAnnotationsValidator />
+
+                        @if (!string.IsNullOrEmpty(_editError))
+                        {
+                            <div class="alert alert-danger" role="alert">@_editError</div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Department Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="_editDepartment.Name" />
+                            <ValidationMessage For="@(() => _editDepartment.Name)" class="text-danger small" />
+                        </div>
+
+                        <div class="d-grid gap-2 d-sm-flex justify-content-sm-end">
+                            <button type="button" class="btn btn-secondary" @onclick="() => _editDepartment = null">Cancel</button>
+                            <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                <span class="bi bi-check-circle me-1"></span>Save Changes
+                            </button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Deactivation confirmation modal -->
+@if (_departmentToDeactivate is not null)
+{
+    <div class="modal" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger-subtle">
+                    <h5 class="modal-title text-danger">
+                        <span class="bi bi-exclamation-triangle me-2"></span>Confirm Deactivation
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="() => _departmentToDeactivate = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to deactivate <strong>@_departmentToDeactivate.Name</strong>?</p>
+                    <p class="text-muted small">
+                        It will no longer be listed or available for new employees.
+                        Departments with active employees can't be deactivated.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => _departmentToDeactivate = null">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="ConfirmDeactivateAsync" disabled="@_saving">
+                        <span class="bi bi-check-circle me-1"></span>Deactivate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const string SortName = "name";
+    private const string SortEmployeeCount = "employeeCount";
+    private const int PageSize = 10;
+
+    private List<DepartmentListItemDto>? _departments;
+    private bool _showCreateDialog;
+    private bool _saving;
+    private DepartmentListItemDto? _departmentToDeactivate;
+    private CreateDepartmentRequestDto _newDepartment = new();
+    private string? _errorMessage;
+    private string? _createError;
+    private UpdateDepartmentRequestDto? _editDepartment;
+    private int _editDepartmentId;
+    private string? _editError;
+
+    // Server-side pagination & sorting
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private string _sortColumn = SortName;
+    private bool _sortDescending;
+
+    private bool CanManage => AuthService.IsInRole("Admin", "HR");
+
+    protected override async Task OnAuthenticatedAsync()
+    {
+        await LoadDepartmentsAsync();    }
+
+    private async Task LoadDepartmentsAsync()
+    {
+        try
+        {
+            var result = await DepartmentApi.GetPagedAsync(_currentPage, PageSize, _sortColumn, _sortDescending);
+            _departments = result?.Items ?? [];
+            _totalPages = Math.Max(1, (int)Math.Ceiling((result?.TotalCount ?? 0) / (double)PageSize));
+
+            // The last page may have become empty after a deactivation
+            if (_departments.Count == 0 && _currentPage > 1)
+            {
+                _currentPage = _totalPages;
+                await LoadDepartmentsAsync();
+            }
+        }
+        catch (ApiException ex)
+        {
+            Logger.LogWarning("Loading departments failed: {Status}", ex.StatusCode);
+            _departments ??= [];
+            _errorMessage = ex.Message;
+        }
+    }
+
+    private RenderFragment SortIcon(string column) => __builder =>
+    {
+        if (_sortColumn == column)
+        {
+            <i class="bi @(_sortDescending ? "bi-arrow-down" : "bi-arrow-up")"></i>
+        }
+    };
+
+    private async Task SortByAsync(string column)
+    {
+        _sortDescending = _sortColumn == column && !_sortDescending;
+        _sortColumn = column;
+        _currentPage = 1;
+        await LoadDepartmentsAsync();
+    }
+
+    private async Task GoToPageAsync(int pageNumber)
+    {
+        if (pageNumber < 1 || pageNumber > _totalPages || pageNumber == _currentPage)
+            return;
+
+        _currentPage = pageNumber;
+        await LoadDepartmentsAsync();
+    }
+
+    private void ShowCreateDialog()
+    {
+        _createError = null;
+        _newDepartment = new();
+        _showCreateDialog = true;
+    }
+
+    private async Task CreateDepartmentAsync()
+    {
+        _saving = true;
+        _createError = null;
+        try
+        {
+            await DepartmentApi.CreateAsync(_newDepartment);
+            _showCreateDialog = false;
+            await LoadDepartmentsAsync();
+        }
+        catch (ApiException ex)
+        {
+            // Shown inside the dialog so the user can correct the name (e.g. duplicate)
+            _createError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ShowEditDialog(DepartmentListItemDto department)
+    {
+        _editDepartmentId = department.Id;
+        _editError = null;
+        _editDepartment = new UpdateDepartmentRequestDto { Name = department.Name };
+    }
+
+    private async Task SaveEditAsync()
+    {
+        _saving = true;
+        _editError = null;
+        try
+        {
+            await DepartmentApi.UpdateAsync(_editDepartmentId, _editDepartment!);
+            _editDepartment = null;
+            await LoadDepartmentsAsync();
+        }
+        catch (ApiException ex)
+        {
+            // Shown inside the dialog so the user can correct the name (e.g. duplicate)
+            _editError = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ShowDeactivateDialog(DepartmentListItemDto department) => _departmentToDeactivate = department;
+
+    private async Task ConfirmDeactivateAsync()
+    {
+        _saving = true;
+        try
+        {
+            await DepartmentApi.DeactivateAsync(_departmentToDeactivate!.Id);
+            await LoadDepartmentsAsync();
+        }
+        catch (ApiException ex)
+        {
+            // e.g. 409: the department still has active employees
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+            _departmentToDeactivate = null;
+        }
+    }
+}

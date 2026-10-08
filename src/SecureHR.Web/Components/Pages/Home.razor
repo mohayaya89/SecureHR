@@ -1,0 +1,97 @@
+﻿@page "/"
+@rendermode InteractiveServer
+@inherits AuthenticatedPage
+
+<PageTitle>Home</PageTitle>
+
+@if (IsReady)
+{
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Welcome to SecureHR</h1>
+            <p class="lead text-muted">Employee Management System</p>
+        </div>
+
+        <div class="row g-4 mt-4">
+            <!-- Employees -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="card-icon employees-icon">
+                        <span class="bi bi-people-fill"></span>
+                    </div>
+                    <div class="card-content">
+                        <h5>Employees</h5>
+                        <p class="text-muted small">Manage employee information and records</p>
+                    </div>
+                    <NavLink href="/employees" class="btn btn-primary btn-sm w-100 mt-3">
+                        <span class="bi bi-arrow-right"></span> View
+                    </NavLink>
+                </div>
+            </div>
+
+            <!-- Departments -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="card-icon departments-icon">
+                        <span class="bi bi-diagram-3"></span>
+                    </div>
+                    <div class="card-content">
+                        <h5>Departments</h5>
+                        <p class="text-muted small">Organize and manage departments</p>
+                    </div>
+                    <NavLink href="/departments" class="btn btn-primary btn-sm w-100 mt-3">
+                        <span class="bi bi-arrow-right"></span> View
+                    </NavLink>
+                </div>
+            </div>
+
+            <!-- Payroll -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="card-icon payroll-icon">
+                        <span class="bi bi-cash-coin"></span>
+                    </div>
+                    <div class="card-content">
+                        <h5>Payroll</h5>
+                        <p class="text-muted small">Process and manage employee payroll</p>
+                    </div>
+                    <NavLink href="/payroll" class="btn btn-primary btn-sm w-100 mt-3">
+                        <span class="bi bi-arrow-right"></span> View
+                    </NavLink>
+                </div>
+            </div>
+
+            <!-- Reports -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="card-icon reports-icon">
+                        <span class="bi bi-bar-chart-fill"></span>
+                    </div>
+                    <div class="card-content">
+                        <h5>Reports</h5>
+                        <p class="text-muted small">View analytics and reports</p>
+                    </div>
+                    <NavLink href="/reports" class="btn btn-primary btn-sm w-100 mt-3">
+                        <span class="bi bi-arrow-right"></span> View
+                    </NavLink>
+                </div>
+            </div>
+
+            <!-- Audit Logs -->
+            <div class="col-md-6 col-lg-4">
+                <div class="dashboard-card">
+                    <div class="card-icon audit-icon">
+                        <span class="bi bi-shield-check"></span>
+                    </div>
+                    <div class="card-content">
+                        <h5>Audit Logs</h5>
+                        <p class="text-muted small">Review system activity and logs</p>
+                    </div>
+                    <NavLink href="/audit-logs" class="btn btn-primary btn-sm w-100 mt-3">
+                        <span class="bi bi-arrow-right"></span> View
+                    </NavLink>
+                </div>
+            </div>
+        </div>
+    </div>
+}

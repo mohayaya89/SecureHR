@@ -1,0 +1,71 @@
+@page "/debug"
+@rendermode InteractiveServer
+@using SecureHR.Web.Services
+@inject AuthService AuthService
+@inject IWebHostEnvironment Environment
+
+<PageTitle>Debug</PageTitle>
+
+@* Diagnostic page: available only in Development and never shows the token itself. *@
+@if (!Environment.IsDevelopment())
+{
+    <h3>Not Found</h3>
+    <p>Sorry, the content you are looking for does not exist.</p>
+}
+else
+{
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0">Authentication Debug (Development only)</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>IsAuthenticated:</strong></td>
+                                <td>
+                                    @if (AuthService.IsAuthenticated)
+                                    {
+                                        <span class="badge bg-success">TRUE</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">FALSE</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>User:</strong></td>
+                                <td>@(AuthService.Username ?? "-")</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Role:</strong></td>
+                                <td>@(AuthService.Role ?? "-")</td>
+                            </tr>
+                        </table>
+
+                        <div class="mt-4">
+                            <h6>Test Navigation:</h6>
+                            <NavLink href="/" class="btn btn-primary btn-sm me-2">Go to Home</NavLink>
+                            <NavLink href="/employees" class="btn btn-primary btn-sm me-2">Go to Employees</NavLink>
+                            <NavLink href="/login" class="btn btn-primary btn-sm">Go to Login</NavLink>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Environment.IsDevelopment())
+        {
+            await AuthService.InitializeAsync();
+            StateHasChanged();
+        }
+    }
+}
